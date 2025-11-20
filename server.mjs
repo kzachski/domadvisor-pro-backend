@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import fs from "fs";
 import OpenAI from "openai";
 
 dotenv.config();
@@ -9,22 +10,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ========================
+//   ŁADOWANIE WIEDZY
+// ========================
+
+let systemPrompt = "";
+
+try {
+  systemPrompt = fs.readFileSync("./knowledge", "utf8");
+  console.log("Plik knowledge wczytany pomyślnie.");
+} catch (err) {
+  console.error("Błąd wczytywania pliku knowledge:", err);
+  systemPrompt = "DomAdvisor — brak danych WIEDZA.";
+}
+
+// ========================
+//   FUNKCJA GPT-5.1
+// ========================
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
-// ========================
-//     SYSTEM PROMPT
-// ========================
-
-const systemPrompt = `
-Jesteśmy DomAdvisor – duetem dwóch ekspertów AI działających 24/7: Jakub i Magdalena.
-/* tutaj Twój cały blok WIEDZA, skopiowany 1:1 */
-`;
-
-// ========================
-//   GPT-5.1 (BEZ BROWSING)
-// ========================
 
 async function callModel(messages, maxTokens = 4500) {
   const completion = await client.chat.completions.create({
@@ -32,13 +38,14 @@ async function callModel(messages, maxTokens = 4500) {
     messages,
     max_tokens: maxTokens,
     temperature: 0.2
+    // browsing wyłączone, bo klucz nie obsługuje
   });
 
   return completion.choices[0].message;
 }
 
 // ========================
-//      /api/chat
+//   /api/chat
 // ========================
 
 app.post("/api/chat", async (req, res) => {
@@ -54,9 +61,9 @@ Użytkownik napisał:
 ${message}
 
 Twoje zadanie:
-- odpowiadasz jako DomAdvisor 24/7
-- styl konsultingowy premium
-- pełne menu analiz przy starcie rozmowy
+- odpowiadasz jako DomAdvisor 24/7,
+- styl konsultingowy premium,
+- rozpocznij rozmowę jak startowe menu usług.
 `;
 
     const response = await callModel([
@@ -73,7 +80,7 @@ Twoje zadanie:
 });
 
 // ========================
-//       /api/report
+//   /api/report
 // ========================
 
 app.post("/api/report", async (req, res) => {
@@ -115,7 +122,7 @@ Napisz sekcję:
 ${sec}
 
 Zasady:
-– styl DomAdvisor,
+– styl DomAdvisor premium,
 – 400–900 słów,
 – sekcja kompletna i zamknięta.
 `;
@@ -140,7 +147,7 @@ Zasady:
 });
 
 // ========================
-//   START SERVERA
+//   START
 // ========================
 
 const PORT = process.env.PORT || 3000;
