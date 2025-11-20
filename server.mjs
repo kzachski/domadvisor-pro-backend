@@ -17,11 +17,13 @@ const client = new OpenAI({
 //     SYSTEM PROMPT 
 // ========================
 
-const systemPrompt = `Jesteśmy DomAdvisor – duetem ekspertów AI działających 24/7... (TWÓJ CAŁY PROMPT WIEDZA)
+const systemPrompt = `
+Jesteśmy DomAdvisor – duetem ekspertów AI działających 24/7.
+(TU WKLEJ CAŁY TEKST WIEDZA — W JEDNYM BLOKU, BEZ PRZERYWANIA)
 `;
 
 // ========================
-//  GPT-5.1 — BROWSING OK!
+//   POPRAWNA FUNKCJA GPT-5.1
 // ========================
 
 async function callModel(messages, maxTokens = 4500) {
@@ -30,16 +32,14 @@ async function callModel(messages, maxTokens = 4500) {
     messages,
     max_tokens: maxTokens,
     temperature: 0.2,
-    web: {
-      search: true
-    }
+    web: { search: true }
   });
 
   return completion.choices[0].message;
 }
 
 // ========================
-//   POST /api/chat
+//      /api/chat
 // ========================
 
 app.post("/api/chat", async (req, res) => {
@@ -57,7 +57,7 @@ ${message}
 Twoje zadanie:
 - odpowiadasz jako DomAdvisor 24/7
 - styl konsultingowy premium
-- pełne menu analiz jeśli użytkownik zaczyna rozmowę
+- pełne menu analiz przy starcie rozmowy
 `;
 
     const response = await callModel([
@@ -74,7 +74,7 @@ Twoje zadanie:
 });
 
 // ========================
-//   POST /api/report
+//       /api/report
 // ========================
 
 app.post("/api/report", async (req, res) => {
@@ -92,11 +92,61 @@ Opis:
 ${description}
 `;
 
-    const sectionsDefinitions = [
-      "1. Wprowadzenie i założenia – 400–600 słów",
-      "2. Streszczenie kluczowych wniosków – 350–500 słów",
-      "3. Tabela parametrów – 300–500 słów",
-      "4. Analiza rynkowa – 500–800 słów",
-      "5. Analiza finansowa – cz.1 – 500–800 słów",
-      "6. Analiza finansowa – cz.2 – 500–800 słów",
-      "7. Analiza układu – Magdalen
+    const sections = [
+      "1. Wprowadzenie i założenia",
+      "2. Streszczenie kluczowych wniosków",
+      "3. Tabela parametrów",
+      "4. Analiza rynkowa",
+      "5. Analiza finansowa – część 1",
+      "6. Analiza finansowa – część 2",
+      "7. Analiza układu – Magdalena",
+      "8. Scenariusze A/B/C",
+      "9. Ryzyka",
+      "10. Wnioski końcowe + źródła"
+    ];
+
+    const output = [];
+
+    for (const sec of sections) {
+      const msg = `
+DANE OFERTY:
+${input}
+
+Napisz sekcję:
+${sec}
+
+Zasady:
+– korzystaj z browsing,
+– styl DomAdvisor,
+– 400–900 słów,
+– sekcja zamknięta i kompletna.
+`;
+
+      const response = await callModel([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: msg }
+      ]);
+
+      output.push(response.content);
+    }
+
+    return res.json({
+      sections: output,
+      report: output.join("\n\n")
+    });
+
+  } catch (err) {
+    console.error("Błąd /api/report:", err);
+    return res.status(500).json({ error: "/api/report – błąd backendu." });
+  }
+});
+
+// ========================
+//   START SERVERA
+// ========================
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`DomAdvisor backend działa na porcie ${PORT}`);
+});
