@@ -107,22 +107,14 @@ async function callModel(messages, maxTokens = 4500) {
     messages,
     max_tokens: maxTokens,
     temperature: 0.2,
-    tools: [
-      {
-        type: "web_run",
-        name: "web.run"
-      }
-    ]
+    web: {
+      search: true
+    }
   });
 
-  const choice = completion.choices[0];
-
-  if (choice.message.tool_calls?.length) {
-    return choice;
-  }
-
-  return choice.message;
+  return completion.choices[0].message;
 }
+
 
 // ==================================================
 //  ENDPOINT: /api/chat – konsultacje + MENU
@@ -242,3 +234,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log("DomAdvisor 24/7 – GPT-5.1 + browsing – backend działa na porcie", PORT)
 );
+
