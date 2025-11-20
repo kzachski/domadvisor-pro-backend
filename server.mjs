@@ -1,60 +1,59 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import fs from "fs";
 import OpenAI from "openai";
 
 dotenv.config();
 
 const app = express();
-console.log(">>> OPENAI KEY LOADED:", process.env.OPENAI_API_KEY ? "YES" : "NO");
-
 app.use(cors());
 app.use(express.json());
 
-// ========================
-//   ŁADOWANIE WIEDZY
-// ========================
-
-let systemPrompt = "";
-
-try {
-  systemPrompt = fs.readFileSync("./knowledge", "utf8");
-  console.log("Plik knowledge wczytany pomyślnie.");
-} catch (err) {
-  console.error("Błąd wczytywania pliku knowledge:", err);
-  systemPrompt = "DomAdvisor — brak danych WIEDZA.";
-}
-
-// ========================
-//   FUNKCJA GPT-5.1
-// ========================
+// ================== OPENAI CLIENT ==================
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-async function callModel(messages, maxTokens = 4500) {
-  const completion = await client.chat.completions.create({
-    model: "gpt-5.1",
-    messages,
-    max_tokens: maxTokens,
-    temperature: 0.2
-    // browsing wyłączone, bo klucz nie obsługuje
-  });
+// ================== SYSTEM PROMPT ==================
 
-  return completion.choices[0].message;
+const systemPrompt = `Jesteś DOMADVISOR PRO – duetem dwóch ekspertów:
+
+• Jakub – finanse, ROI, mediany, NBP, AMRON, flip, analizy rynku.
+• Magdalena – układ, ergonomia, funkcjonalność, błędy projektowe.
+
+(... TWÓJ DUŻY SYSTEM PROMPT TUTAJ – NIE ZMIENIAM GO ...)
+`;
+
+
+// ================== UNIWERSALNE WYWOŁANIE MODELU ==================
+
+async function callModel(messages, maxTokens = 3000, model = "gpt-4o") {
+  try {
+    const response = await client.responses.create({
+      model,
+      input: messages,                  // nowy format input
+      temperature: 0.2,
+      max_output_tokens: maxTokens      // nowy parametr
+    });
+
+    // responses API zwraca unified output_text
+    return response.output_text;
+
+  } catch (err) {
+    console.error("OpenAI error:", err?.error || err);
+    throw new Error("OpenAI request failed");
+  }
 }
 
-// ========================
-//   /api/chat
-// ========================
+
+// ================== /api/chat – MINI RAPORT ==================
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, mode } = req.body || {};
 
-    if (!message) {
+    if (!message || !message.trim()) {
       return res.status(400).json({ error: "Brak treści wiadomości." });
     }
 
@@ -62,99 +61,97 @@ app.post("/api/chat", async (req, res) => {
 Użytkownik napisał:
 ${message}
 
-Twoje zadanie:
-- odpowiadasz jako DomAdvisor 24/7,
-- styl konsultingowy premium,
-- rozpocznij rozmowę jak startowe menu usług.
-`;
+Odpowiedz jako DomAdvisor PRO w formie mini-raportu premium (250–800 słów).
+Zamknij wszystkie wątki. Nie kontynuuj w kolejnych odpowiedziach.
+    `;
 
-    const response = await callModel([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMsg }
-    ]);
+    const reply = await callModel(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMsg }
+      ],
+      3000,
+      "gpt-4o"    // lub "gpt-5.1"
+    );
 
-    return res.json({ reply: response.content });
+    return res.json({ reply });
 
   } catch (err) {
-    console.error("Błąd /api/chat:", err);
-    return res.status(500).json({ error: "Błąd backendu /api/chat." });
+    console.error("Chat error:", err);
+    return res.status(500).json({ error: "Błąd po stronie serwera /api/chat." });
   }
 });
 
-// ========================
-//   /api/report
-// ========================
+
+// ================== /api/report — RAPORT 4000–6000 SŁÓW ==================
 
 app.post("/api/report", async (req, res) => {
   try {
-    const { location, price, area, floor, description, mode } = req.body;
+    const { location, price, area, floor, description } = req.body || {};
 
-    const input = `
-Lokalizacja: ${location}
-Cena: ${price}
-Metraż: ${area}
-Piętro: ${floor}
-Tryb: ${mode}
+    const userInput = `
+DANE PODANE PRZEZ UŻYTKOWNIKA:
 
-Opis:
-${description}
-`;
+Lokalizacja: ${location || "brak"}
+Cena: ${price || "brak"}
+Metraż: ${area || "brak"}
+Piętro: ${floor || "brak"}
+Opis oferty:
+${description || "brak"}
+    `;
 
-    const sections = [
-      "1. Wprowadzenie i założenia",
-      "2. Streszczenie kluczowych wniosków",
-      "3. Tabela parametrów",
-      "4. Analiza rynkowa",
-      "5. Analiza finansowa – część 1",
-      "6. Analiza finansowa – część 2",
-      "7. Analiza układu – Magdalena",
-      "8. Scenariusze A/B/C",
-      "9. Ryzyka",
-      "10. Wnioski końcowe + źródła"
+    const chunkInstructions = [
+      "Sekcja 1 – Streszczenie premium (350–600 słów).",
+      "Sekcja 2 – Analiza finansowa – Jakub (700–1000 słów).",
+      "Sekcja 3 – Analiza układu – Magdalena (600–900 słów).",
+      "Sekcja 4 – Potencjał inwestycyjny (500–800 słów).",
+      "Sekcja 5 – Analiza rynku (NBP, SonarHome, AMRON, GUS) – 550–850 słów.",
+      "Sekcja 6 – Ryzyka transakcyjne (400–700 słów).",
+      "Sekcja 7 – Scenariusze A/B/C (400–700 słów).",
+      "Sekcja 8 – Rekomendacja + plan 30/60/90 (400–700 słów)."
     ];
 
-    const output = [];
+    const sections = [];
 
-    for (const sec of sections) {
-      const msg = `
-DANE OFERTY:
-${input}
+    for (const instruction of chunkInstructions) {
+      const chunkMessage = `
+Dane wejściowe:
+${userInput}
 
-Napisz sekcję:
-${sec}
+Twoje zadanie:
+${instruction}
 
-Zasady:
-– styl DomAdvisor premium,
-– 400–900 słów,
-– sekcja kompletna i zamknięta.
-`;
+Pisz zgodnie z metodologią DomAdvisor PRO.
+Każda sekcja ma być ZAMKNIĘTA — nie kontynuujesz w następnych częściach.
+      `;
 
-      const response = await callModel([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: msg }
-      ]);
+      const section = await callModel(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: chunkMessage }
+        ],
+        4500,          // dużo miejsca
+        "gpt-5.1"      // model idealny do długich raportów
+      );
 
-      output.push(response.content);
+      sections.push(section);
     }
 
-    return res.json({
-      sections: output,
-      report: output.join("\n\n")
-    });
+    const report = sections.join("\n\n\n");
+
+    res.json({ report, sections });
 
   } catch (err) {
-    console.error("Błąd /api/report:", err);
-    return res.status(500).json({ error: "Błąd backendu /api/report." });
+    console.error("Report error:", err);
+    res.status(500).json({ error: "Błąd po stronie serwera /api/report." });
   }
 });
 
-// ========================
-//   START
-// ========================
+
+// ================== START SERWERA ==================
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(`DomAdvisor backend działa na porcie ${PORT}`);
+  console.log("DomAdvisor PRO backend działa na porcie", PORT);
+  console.log(">>> OPENAI KEY LOADED:", process.env.OPENAI_API_KEY ? "YES" : "NO");
 });
-
