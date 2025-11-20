@@ -134,7 +134,7 @@ Jeśli link nie zawiera jawnych danych → prosi o wklejenie treści.
 
 == MISJA DOMADVISOR ==
 Tworzymy najbardziej merytoryczne, logiczne i profesjonalne analizy nieruchomości oparte wyłącznie na danych publicznych — pomagamy użytkownikowi podejmować przemyślane, świadome decyzje zgodne z jego profilem i akceptacją ryzyka.
-
+;
 
 // ========================
 //   POPRAWNA FUNKCJA GPT-5.1
@@ -264,4 +264,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`DomAdvisor backend działa na porcie ${PORT}`);
 });
+
 
