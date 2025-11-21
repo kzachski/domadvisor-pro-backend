@@ -289,79 +289,41 @@ async function callModel(messages) {
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history } = req.body || {};
-
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: "Brak treści wiadomości." });
-    }
+    const { message, history } = req.body;
 
     const messages = [
-      { role: "system", content: systemPrompt },
+      {
+        role: "system",
+        content: `${systemPrompt}
+
+Tryb: ⚡ RAPORT SZYBKI ⚡
+- Generuj natychmiastowy skrócony raport  
+- 400–700 słów  
+- Zachowaj strukturę, ale krótszą  
+- Zero “poproszę o chwilę”  
+- Od razu pisz WYNIK`
+      },
       ...(history || []),
       { role: "user", content: message }
     ];
 
-    const reply = await callModel(messages);
-
-    return res.json({
-      success: true,
-      reply
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      max_tokens: 2500,
+      temperature: 0.6,
     });
+
+    const response = completion.choices[0].message.content;
+    console.log("⚡ Raport szybki wygenerowany — znaki:", response.length);
+    res.json({ success: true, response });
 
   } catch (err) {
-    console.error("❌ /api/chat error:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Błąd serwera /api/chat."
-    });
+    console.error("❌ Błąd rapid report:", err);
+    res.json({ success: false, error: err.message });
   }
 });
 
-// ===================================================================
-//  /api/report — Raport Premium 4000–6000 słów
-// ===================================================================
-
-app.post("/api/report", async (req, res) => {
-  try {
-    const { location, price, area, floor, description } = req.body || {};
-
-    const input = `
-Lokalizacja: ${location}
-Cena: ${price}
-Metraż: ${area}
-Piętro: ${floor}
-Opis oferty:
-${description}
-`;
-
-    const messages = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: `
-Wygeneruj RAPORT PREMIUM (4000–6000 słów).
-Użyj pełnej struktury 10-sekcyjnej DomAdvisor.
-Dane wejściowe:
-${input}
-`
-      }
-    ];
-
-    const report = await callModel(messages);
-
-    return res.json({
-      success: true,
-      report
-    });
-
-  } catch (err) {
-    console.error("❌ /api/report error:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Błąd serwera /api/report."
-    });
-  }
-});
 
 // ===================================================================
 //  RUN SERVER
@@ -373,4 +335,5 @@ app.listen(PORT, () => {
   console.log("🌐 Port:", PORT);
   console.log("🔑 OPENAI KEY:", process.env.OPENAI_API_KEY ? "OK" : "BRAK");
 });
+
 
