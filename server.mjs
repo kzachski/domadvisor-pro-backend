@@ -287,6 +287,10 @@ async function callModel(messages) {
 //  /api/chat — pełny dialog z historią
 // ===================================================================
 
+// =========================================================
+// 💬 ENDPOINT: CZAT SZYBKI (jedno strzałowe odpowiedzi 1000–1500 słów)
+// =========================================================
+
 app.post("/api/chat", async (req, res) => {
   try {
     const { message, history } = req.body;
@@ -295,35 +299,28 @@ app.post("/api/chat", async (req, res) => {
       {
         role: "system",
         content: `${systemPrompt}
-
-Tryb: ⚡ RAPORT SZYBKI ⚡
-- Generuj natychmiastowy skrócony raport  
-- 400–700 słów  
-- Zachowaj strukturę, ale krótszą  
-- Zero “poproszę o chwilę”  
-- Od razu pisz WYNIK`
+Tryb: Raport skrócony — generuj odpowiedź ekspercką 1000–1500 słów zamiast pełnego dialogu.
+Zachowaj strukturę premium, ale bez trybu krokowego.`,
       },
       ...(history || []),
-      { role: "user", content: message }
+      { role: "user", content: message },
     ];
 
-    const completion = await openai.chat.completions.create({
+    const completion = await client.responses.create({
       model: "gpt-4o",
-      messages,
-      max_tokens: 2500,
-      temperature: 0.6,
+      input: messages,
+      max_output_tokens: 6000,
+      temperature: 0.5,
     });
 
-    const response = completion.choices[0].message.content;
-    console.log("⚡ Raport szybki wygenerowany — znaki:", response.length);
-    res.json({ success: true, response });
+    const response = completion.output_text;
+    res.json({ success: true, reply: response });
 
   } catch (err) {
-    console.error("❌ Błąd rapid report:", err);
-    res.json({ success: false, error: err.message });
+    console.error("❌ Błąd szybkiego czatu:", err);
+    res.json({ success: false, reply: "Wystąpił błąd generowania analizy." });
   }
 });
-
 
 // ===================================================================
 //  RUN SERVER
@@ -335,5 +332,6 @@ app.listen(PORT, () => {
   console.log("🌐 Port:", PORT);
   console.log("🔑 OPENAI KEY:", process.env.OPENAI_API_KEY ? "OK" : "BRAK");
 });
+
 
 
