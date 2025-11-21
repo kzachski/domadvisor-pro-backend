@@ -486,11 +486,15 @@ async function callModel(messages) {
     model: "gpt-4o",
     input: messages,
     temperature: 0.3,
-    max_output_tokens: 12000
+    max_output_tokens: 20000,   // pozwala na pełny raport premium
+    tools: [
+      { type: "web_browsing" }  // browsing identyczny jak w GPTs
+    ]
   });
 
   return response.output_text;
 }
+
 
 // ===================================================================
 //  /api/chat — pełny dialog z historią
@@ -564,4 +568,5 @@ app.listen(PORT, () => {
   console.log("🌐 Port:", PORT);
   console.log("🔑 OpenAI KEY:", process.env.OPENAI_API_KEY ? "OK" : "BRAK");
 });
+
 
