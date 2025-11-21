@@ -1,7 +1,3 @@
-// ================================================================
-//  DomAdvisor — Backend Premium (Wersja Lekka & Stabilna)
-// ================================================================
-
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -13,149 +9,95 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================================================================
-//  OPENAI CLIENT
-// ================================================================
+// ======================================================
+//  OPENAI CLIENT – używamy Threads API (GPT-s)
+// ======================================================
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// ================================================================
-//  SYSTEM PROMPT — WERSJA LEKKA, PREMIUM, STABILNA
-// ================================================================
+// Twój GPT-s
+const ASSISTANT_ID = "asst_2yfBUCL99rc5zM3O9evguBwn";
 
-const systemPrompt = `
-Jesteś systemem analitycznym DOMADVISOR — ekspertem ds. nieruchomości, rzeczoznawcą i doradcą inwestycyjnym działającym jak duet:
-
-• Jakub — analityk finansowy (ROI, cap rate, DSCR, flipping, koszty remontów, analiza cen)
-• Magdalena — architekt wnętrz i ekspert ergonomii (układ, światło, estetyka, liftingi A/B/C)
-
-Styl:
-– konsultingowy premium,
-– spokojny, analityczny, precyzyjny,
-– brak emotikonów i potocznego języka,
-– obszerne odpowiedzi pełne danych i logiki.
-
-Zawsze generujesz raport premium 4000–7000 słów według struktury:
-
-1. Streszczenie oferty / dane ogólne  
-2. Analiza rynkowa (mediany, trendy, kontekst lokalizacji)  
-3. Analiza finansowa (Jakub)  
-4. Analiza funkcjonalno–estetyczna (Magdalena)  
-5. Ryzyka  
-6. Rekomendacja końcowa (neutralna, bez “kup/sprzedaj”)  
-7. Źródła danych (NBP, Otodom Analytics, AMRON-SARFiN, GUS)  
-8. Uwaga metodologiczna  
-
-W analizie finansowej uwzględniaj:
-– cena/m² vs mediana,
-– ROI, cap rate, cashflow,
-– DSCR (jeśli dotyczy),
-– koszty remontów A/B/C,
-– plan działań 30/60/90 dni.
-
-W analizie Magdaleny uwzględniaj:
-– układ funkcjonalny,
-– światło i ekspozycję,
-– proporcje i ustawność,
-– estetykę i standard,
-– potencjał liftingowy (A/B/C).
-
-Jeśli dane rynkowe nie są dostępne, podawaj ostrożne widełki lub interpretację.
-Nie przewidujesz przyszłych cen.
-Nie wydajesz rekomendacji inwestycyjnych.
-
-Każdy raport kończysz:
-„Dane mają charakter edukacyjny i nie stanowią rekomendacji inwestycyjnej.”
-`;
-
-// ================================================================
-//  FUNKCJA: WYWOŁANIE OPENAI
-// ================================================================
-
-async function callModel(messages, maxTokens = 8000) {
-  try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages,
-      temperature: 0.35,
-      max_tokens: maxTokens,
-    });
-
-    return response.choices[0].message.content;
-  } catch (err) {
-    console.error("❌ OpenAI ERROR:", err?.error || err);
-    return "Błąd generowania raportu.";
-  }
-}
-
-// ================================================================
-//  ENDPOINT: PEŁNY CZAT (1:1 zapytanie → kompleksowa odpowiedź)
-// ================================================================
+// ======================================================
+//  /api/chat — pełny dialog, identyczny jak w GPT-s
+// ======================================================
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message) {
+    const { message, threadId } = req.body;
+
+    if (!message || !message.trim()) {
       return res.status(400).json({ error: "Brak treści wiadomości." });
     }
 
-    const messages = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: message },
-    ];
+    let thread;
 
-    const reply = await callModel(messages, 6000);
+    // jeśli nie ma thread → utwórz nowy (jak ChatGPT)
+    if (!threadId) {
+      thread = await client.beta.threads.create();
+    } else {
+      thread = { id: threadId };
+    }
 
-    res.json({ success: true, reply });
+    // dodaj wiadomość użytkownika
+    await client.beta.threads.messages.create(thread.id, {
+      role: "user",
+      content: message
+    });
+
+    // uruchom asystenta (GPT-s)
+    const run = await client.beta.threads.runs.create(thread.id, {
+      assistant_id: ASSISTANT_ID
+    });
+
+    // czekamy aż model skończy
+    let result;
+    while (true) {
+      result = await client.beta.threads.runs.retrieve(thread.id, run.id);
+
+      if (result.status === "completed") break;
+      if (result.status === "failed") {
+        return res.status(500).json({
+          error: "Asystent nie mógł wygenerować odpowiedzi."
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+
+    // pobierz odpowiedź
+    const messages = await client.beta.threads.messages.list(thread.id);
+
+    const last = messages.data[0].content[0].text.value;
+
+    return res.json({
+      success: true,
+      reply: last,
+      threadId: thread.id
+    });
+
   } catch (err) {
-    console.error("/api/chat ERROR:", err);
-    res.status(500).json({ success: false, error: "Błąd serwera." });
+    console.error("/api/chat error:", err);
+    return res.status(500).json({
+      error: "Błąd serwera w /api/chat."
+    });
   }
 });
 
-// ================================================================
-//  ENDPOINT: RAPORT PREMIUM
-// ================================================================
-
-app.post("/api/report", async (req, res) => {
-  try {
-    const { location, price, area, floor, description } = req.body || {};
-
-    const input = `
-Lokalizacja: ${location || "brak"}
-Cena: ${price || "brak"}
-Metraż: ${area || "brak"}
-Piętro: ${floor || "brak"}
-Opis:
-${description || "brak"}
-`;
-
-    const messages = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: `Wygeneruj pełny raport premium dla nieruchomości na podstawie danych:\n${input}`,
-      },
-    ];
-
-    const report = await callModel(messages, 8000);
-
-    res.json({ success: true, report });
-  } catch (err) {
-    console.error("/api/report ERROR:", err);
-    res.status(500).json({ success: false, error: "Błąd serwera raportu." });
-  }
-});
-
-// ================================================================
+// ======================================================
 //  START SERVERA
-// ================================================================
+// ======================================================
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("🚀 DomAdvisor — Backend Premium działa");
+  console.log("🚀 DomAdvisor + GPT-s działa!");
   console.log("🌐 Port:", PORT);
-  console.log("🔑 Klucz OpenAI:", process.env.OPENAI_API_KEY ? "OK" : "BRAK!");
+  console.log(
+    "🔑 OPENAI KEY:",
+    process.env.OPENAI_API_KEY ? "OK" : "BRAK!"
+  );
+  console.log("🤖 Assistant:", ASSISTANT_ID);
 });
