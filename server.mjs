@@ -343,24 +343,19 @@ async function callModel(messages, maxTokens = 8000, model = "gpt-5.1") {
     temperature: 0.15,
     max_output_tokens: maxTokens
   });
-
   return response.output_text;
 }
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, firstMessage } = req.body || {};
-
-    const finalMessage = firstMessage
-      ? `${message}\n\nWYŚWIETL POWITANIE I MENU ANALIZ.`
-      : message;
+    const { message } = req.body || {};
 
     const reply = await callModel(
       [
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Utwórz RAPORT PREMIUM (4000–6000 słów) zgodnie z pełną strukturą DomAdvisor.\n\nZapytanie użytkownika:\n${finalMessage}`
+          content: `Utwórz RAPORT PREMIUM (4000–6000 słów) zgodnie z pełną strukturą DomAdvisor.\n\nZapytanie użytkownika:\n${message}`
         }
       ],
       8000
